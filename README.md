@@ -106,71 +106,77 @@
  `node generate_witness.js multiplier2.wasm input.json witness.wtns`
 
  ## Proving circuits
-After compiling the circuit and running the witness calculator with an appropriate input, we will have a file with extension .wtns that contains all the computed signals and, a file with extension .r1cs that contains the constraints describing the circuit. Both files will be used to create our proof.
+ After compiling the circuit and running the witness calculator with an appropriate input, we will have a file with extension .wtns that contains all the computed signals and, a file with extension .r1cs that contains the constraints describing the circuit. Both files will be used to create our proof.
+ 
+ Now, we will use the snarkjs tool to generate and validate a proof for our input. In particular, using the multiplier2, we will prove that we are able to provide the two factors of the number 33. That is, we will show that we know two integers a and b such that when we multiply them, it results in the number 33.
+ 
+ We are going to use the Groth16 zk-SNARK protocol. To use this protocol, you will need to generate a trusted setup. Groth16 requires a per circuit trusted setup. In more detail, the trusted setup consists of 2 parts:
+ 
+ The powers of tau, which is independent of the circuit.
+ The phase 2, which depends on the circuit.
+ Next, we provide a very basic ceremony for creating the trusted setup and we also provide the basic commands to create and verify Groth16 proofs. Review the related Background section and check the snarkjs tutorial for further information.  
+ 
+ ### Phase 1  
+ Powers of Tau  
+ First, we start a new "powers of tau" ceremony:  
+ 
+ `snarkjs powersoftau new bn128 12 pot12_0000.ptau -v`  
 
-Now, we will use the snarkjs tool to generate and validate a proof for our input. In particular, using the multiplier2, we will prove that we are able to provide the two factors of the number 33. That is, we will show that we know two integers a and b such that when we multiply them, it results in the number 33.
+ Then, we contribute to the ceremony:
+ 
+ snarkjs powersoftau contribute pot12_0000.ptau pot12_0001.ptau --name="First contribution" -v
+ Now, we have the contributions to the powers of tau in the file pot12_0001.ptau and we can proceed with the Phase 2.
+ 
+ ### Phase 2
+ The phase 2 is circuit-specific. Execute the following command to start the generation of this phase:  
+ 
+ `snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_final.ptau -v`  
 
-We are going to use the Groth16 zk-SNARK protocol. To use this protocol, you will need to generate a trusted setup. Groth16 requires a per circuit trusted setup. In more detail, the trusted setup consists of 2 parts:
+ Next, we generate a .zkey file that will contain the proving and verification keys  together with all phase 2 contributions. Execute the following command to start a new zkey:
+ 
+ `snarkjs groth16 setup multiplier2.r1cs pot12_final.ptau multiplier2_0000.zkey`  
 
-The powers of tau, which is independent of the circuit.
-The phase 2, which depends on the circuit.
-Next, we provide a very basic ceremony for creating the trusted setup and we also provide the basic commands to create and verify Groth16 proofs. Review the related Background section and check the snarkjs tutorial for further information.
+ Contribute to the phase 2 of the ceremony:  
+ 
+ `snarkjs zkey contribute multiplier2_0000.zkey multiplier2_0001.zkey --name="1st Contributor Name" -v`  
 
-Powers of Tau
-First, we start a new "powers of tau" ceremony:
+ Export the verification key:  
+ 
+ `snarkjs zkey export verificationkey multiplier2_0001.zkey verification_key.json`  
 
-snarkjs powersoftau new bn128 12 pot12_0000.ptau -v
-Then, we contribute to the ceremony:
-
-snarkjs powersoftau contribute pot12_0000.ptau pot12_0001.ptau --name="First contribution" -v
-Now, we have the contributions to the powers of tau in the file pot12_0001.ptau and we can proceed with the Phase 2.
-
-Phase 2
-The phase 2 is circuit-specific. Execute the following command to start the generation of this phase:
-
-snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_final.ptau -v
-Next, we generate a .zkey file that will contain the proving and verification keys together with all phase 2 contributions. Execute the following command to start a new zkey:
-
-snarkjs groth16 setup multiplier2.r1cs pot12_final.ptau multiplier2_0000.zkey
-Contribute to the phase 2 of the ceremony:
-
-snarkjs zkey contribute multiplier2_0000.zkey multiplier2_0001.zkey --name="1st Contributor Name" -v
-Export the verification key:
-
-snarkjs zkey export verificationkey multiplier2_0001.zkey verification_key.json
-Generating a Proof
-Once the witness is computed and the trusted setup is already executed, we can generate a zk-proof associated to the circuit and the witness:
-
-snarkjs groth16 prove multiplier2_0001.zkey witness.wtns proof.json public.json
-This command generates a Groth16 proof and outputs two files:
-
-proof.json: it contains the proof.
-public.json: it contains the values of the public inputs and outputs.
-Verifying a Proof
-To verify the proof, execute the following command:
-
-snarkjs groth16 verify verification_key.json public.json proof.json
-The command uses the files verification_key.json we exported earlier,proof.json and public.json to check if the proof is valid. If the proof is valid, the command outputs an OK.
-
-A valid proof not only proves that we know a set of signals that satisfy the circuit, but also that the public inputs and outputs that we use match the ones described in the public.json file.
-
-Verifying from a Smart Contract
-​👉 It is also possible to generate a Solidity verifier that allows verifying proofs on Ethereum blockchain.
-
-First, we need to generate the Solidity code using the command:
-
-snarkjs zkey export solidityverifier multiplier2_0001.zkey verifier.sol
-This command takes validation key multiplier2_0001.zkey and outputs Solidity code in a file named verifier.sol. You can take the code from this file and cut and paste it in Remix. You will see that the code contains two contracts: Pairing and Verifier. You only need to deploy the Verifier contract.
-
-You may want to use first a testnet like Rinkeby, Kovan or Ropsten. You can also use the JavaScript VM, but in some browsers the verification takes long and the page may freeze.
-
-The Verifier has a view function called verifyProof that returns TRUE if and only if the proof and the inputs are valid. To facilitate the call, you can use snarkJS to generate the parameters of the call by typing:
-
-snarkjs generatecall
-Cut and paste the output of the command to the parameters field of the verifyProof method in Remix. If everything works fine, this method should return TRUE. You can try to change just a single bit of the parameters, and you will see that the result is verifiable FALSE.
-
-
-
+ Generating a Proof  
+ Once the witness is computed and the trusted setup is already executed, we can generate a zk-proof associated to the circuit and the witness:  
+ 
+ `snarkjs groth16 prove multiplier2_0001.zkey witness.wtns proof.json public.json`  
+ This command generates a Groth16 proof and outputs two files:
+ 
+ `proof.json`: it contains the proof.  
+ `public.json`: it contains the values of the public inputs and outputs.  
+ Verifying a Proof  
+ To verify the proof, execute the following command:  
+ 
+ `snarkjs groth16 verify verification_key.json public.json proof.json`  
+ The command uses the files verification_key.json we exported earlier,proof.json and public.json to check if the proof is valid. If the proof is valid, the command outputs an OK.  
+ 
+ A valid proof not only proves that we know a set of signals that satisfy the circuit, but also that the public inputs and outputs that we use match the ones described in the public.json file.  
+ 
+ Verifying from a Smart Contract  
+ ​👉 It is also possible to generate a Solidity verifier that allows verifying proofs on Ethereum blockchain.  
+ 
+ First, we need to generate the Solidity code using the command:  
+ 
+ `snarkjs zkey export solidityverifier multiplier2_0001.zkey verifier.sol`  
+ This command takes validation key multiplier2_0001.zkey and outputs Solidity code in a file named verifier.sol. You can take the code from this file and cut and paste it in Remix. You will see that the code contains two contracts: Pairing and Verifier. You only need to deploy the Verifier contract.
+ 
+ You may want to use first a testnet like Rinkeby, Kovan or Ropsten. You can also use the JavaScript VM, but in some browsers the verification takes long and the page may freeze.
+ 
+ The Verifier has a view function called verifyProof that returns TRUE if and only if the proof and the inputs are valid. To facilitate the call, you can use snarkJS to generate the parameters of the call by typing:
+ 
+ `snarkjs generatecall`  
+ Cut and paste the output of the command to the parameters field of the verifyProof method in Remix. If everything works fine, this method should return TRUE. You can try to change just a single bit of the parameters, and you will see that the result is verifiable FALSE.
+ 
+ 
+ 
 
  
  
